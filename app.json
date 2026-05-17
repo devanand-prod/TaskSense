@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "TaskSense",
+    "slug": "tasksense",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAFAF8"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#185FA5"
+      },
+      "package": "com.yourcompany.tasksense",
+      "compileSdkVersion": 34,
+      "targetSdkVersion": 34,
+      "minSdkVersion": 24
+    },
+    "plugins": [
+      "expo-splash-screen"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

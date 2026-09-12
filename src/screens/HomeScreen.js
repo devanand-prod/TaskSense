@@ -13,6 +13,14 @@ import { Ionicons } from '@expo/vector-icons';
 import TaskRow from '../components/TaskRow';
 import { colors, typography, shadow } from '../theme';
 import { fetchTasks, toggleTaskDone } from '../api/sheets';
+import { cancelTaskNotification } from '../utils/notifications';
+
+function timeOfDayGreeting(date) {
+  const hour = date.getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -37,6 +45,10 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleToggle = async (id) => {
+    const target = tasks.find(t => t.id === id);
+    if (target && !target.done) {
+      cancelTaskNotification(target);
+    }
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
     await toggleTaskDone(id);
   };
@@ -72,7 +84,7 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.header}>
               <View>
                 <Text style={styles.dateText}>{dayName}, {dateStr}</Text>
-                <Text style={styles.greeting}>Good morning, Arjun</Text>
+                <Text style={styles.greeting}>{timeOfDayGreeting(today)}</Text>
               </View>
               <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
                 <Ionicons name="notifications-outline" size={18} color="#555" />

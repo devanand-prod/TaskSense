@@ -22,7 +22,13 @@
       "minSdkVersion": 24
     },
     "plugins": [
-      "expo-splash-screen"
+      "expo-splash-screen",
+      [
+        "expo-notifications",
+        {
+          "color": "#185FA5"
+        }
+      ]
     ],
     "extra": {
       "eas": {

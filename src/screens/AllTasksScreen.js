@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import TaskRow from '../components/TaskRow';
 import { colors, shadow } from '../theme';
 import { fetchTasks, toggleTaskDone } from '../api/sheets';
+import { cancelTaskNotification } from '../utils/notifications';
 import { CATEGORIES } from '../constants';
 
 const FILTERS = ['All', ...CATEGORIES];
@@ -42,6 +43,10 @@ export default function AllTasksScreen({ navigation }) {
   };
 
   const handleToggle = async (id) => {
+    const target = tasks.find(t => t.id === id);
+    if (target && !target.done) {
+      cancelTaskNotification(target);
+    }
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
     await toggleTaskDone(id);
   };

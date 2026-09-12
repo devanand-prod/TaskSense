@@ -11,34 +11,41 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import CategoryChip from '../components/CategoryChip';
 import { colors, typography, shadow } from '../theme';
-import { inferCat, inferDate, generateId } from '../utils/taskUtils';
+import { generateId } from '../utils/taskUtils';
+import { parseTaskInput, resolvePresetDate, formatReminderLabel } from '../utils/nlp';
+import { scheduleTaskNotification } from '../utils/notifications';
 import { addTask } from '../api/sheets';
-import { CATEGORIES } from '../constants';
+import { CATEGORIES, USER_ID } from '../constants';
+
+function chipsFor(p) {
+  return ['Looks good ✓', 'Edit category', 'Edit date', p.hasReminder ? 'Turn off reminder' : 'Add reminder'];
+}
 
 export default function ChatScreen({ route, navigation }) {
   const insets  = useSafeAreaInsets();
   const { input } = route.params;
   const flatRef = useRef(null);
 
-  const dateInfo = inferDate(input);
+  const parsed = parseTaskInput(input);
   const [pending, setPending] = useState({
-    title:     input,
-    category:  inferCat(input),
-    when:      dateInfo.when,
-    dateLabel: dateInfo.label,
-    defRem:    dateInfo.defRem,
-    reminder:  null,
-    source:    'text',
-    note:      '',
-    isNew:     true,
-    overdue:   false,
+    title:        parsed.title,
+    category:     parsed.category,
+    when:         parsed.when,
+    dateLabel:    parsed.dateLabel,
+    dateISO:      parsed.dateISO,
+    hasReminder:  parsed.hasReminder,
+    reminder:     parsed.reminderLabel,
+    reminderISO:  parsed.reminderDate ? parsed.reminderDate.toISOString() : null,
+    source:       'text',
+    note:         '',
+    isNew:        true,
+    overdue:      false,
   });
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
 
   const [messages, setMessages]   = useState([]);
   const [showSave, setShowSave]   = useState(false);
-  const [step, setStep]           = useState(0);
   const [editMode, setEditMode]   = useState(null);
   const initialized               = useRef(false);
 
@@ -77,10 +84,7 @@ export default function ChatScreen({ route, navigation }) {
         addMsg({ type: 'ai', text: "Got it! Here's what I've set up — does this look right?" });
         addMsg({ type: 'card', id: `card_${Date.now()}` });
         setTimeout(() => {
-          addMsg({
-            type: 'chips',
-            chips: ['Looks good ✓', 'Edit category', 'Edit date'],
-          });
+          addMsg({ type: 'chips', chips: chipsFor(pendingRef.current) });
         }, 300);
       }, 900);
     }, 400);
@@ -102,21 +106,21 @@ export default function ChatScreen({ route, navigation }) {
         { type: 'card', id: `card_${Date.now()}` },
       ]);
       setTimeout(() => {
-        addMsg({ type: 'chips', chips: ['Looks good ✓', 'Edit category', 'Edit date'] });
+        addMsg({ type: 'chips', chips: chipsFor(updated) });
       }, 200);
       return;
     }
 
     if (editMode === 'date') {
-      const dateMap = {
-        Today:      { label: 'Today',     when: 'today',    defRem: 'Today 6:00 PM' },
-        Tomorrow:   { label: 'Tomorrow',  when: 'upcoming', defRem: 'Tomorrow 9:00 AM' },
-        'This week':{ label: 'This week', when: 'upcoming', defRem: 'Friday 6:00 PM' },
-        'Next week':{ label: 'Next week', when: 'upcoming', defRem: 'Monday 9:00 AM' },
-        Weekend:    { label: 'Weekend',   when: 'upcoming', defRem: 'Saturday 10:00 AM' },
+      const d = resolvePresetDate(chip);
+      const updated = {
+        ...pendingRef.current,
+        dateLabel:   d.dateLabel,
+        dateISO:     d.dateISO,
+        when:        d.when,
+        reminder:    pendingRef.current.hasReminder ? d.reminderLabel : null,
+        reminderISO: pendingRef.current.hasReminder ? d.dateISO : null,
       };
-      const d = dateMap[chip] || { label: chip, when: 'upcoming', defRem: chip };
-      const updated = { ...pendingRef.current, ...d };
       pendingRef.current = updated;
       setPending(updated);
       setEditMode(null);
@@ -126,7 +130,7 @@ export default function ChatScreen({ route, navigation }) {
         { type: 'card', id: `card_${Date.now()}` },
       ]);
       setTimeout(() => {
-        addMsg({ type: 'chips', chips: ['Looks good ✓', 'Edit category', 'Edit date'] });
+        addMsg({ type: 'chips', chips: chipsFor(updated) });
       }, 200);
       return;
     }
@@ -148,53 +152,52 @@ export default function ChatScreen({ route, navigation }) {
       }, 300);
       return;
     }
-
-    // ── Main flow ──
-    addMsg({ type: 'user', text: chip });
-
-    if (step === 0) {
-      setStep(1);
+    if (chip === 'Turn off reminder' || chip === 'Add reminder') {
+      const turningOn = chip === 'Add reminder';
+      const updated = {
+        ...pendingRef.current,
+        hasReminder: turningOn,
+        reminder:    turningOn ? formatReminderLabel(new Date(pendingRef.current.dateISO)) : null,
+        reminderISO: turningOn ? pendingRef.current.dateISO : null,
+      };
+      pendingRef.current = updated;
+      setPending(updated);
+      addMsg({ type: 'user', text: chip });
+      setMessages(prev => [
+        ...prev.filter(m => m.type !== 'card'),
+        { type: 'card', id: `card_${Date.now()}` },
+      ]);
       setTimeout(() => {
-        showTyping();
-        setTimeout(() => {
-          removeTyping();
-          addMsg({ type: 'ai', text: 'Do you want a reminder for this?' });
-          setTimeout(() => {
-            addMsg({ type: 'chips', chips: ['Yes, remind me', 'No thanks'] });
-          }, 300);
-        }, 700);
-      }, 400);
+        addMsg({ type: 'chips', chips: chipsFor(updated) });
+      }, 200);
       return;
     }
 
-    if (step === 1) {
-      const withReminder = chip === 'Yes, remind me';
-      const rem = withReminder ? pendingRef.current.defRem : null;
-      const updated = { ...pendingRef.current, reminder: rem };
-      pendingRef.current = updated;
-      setPending(updated);
-
-      showTyping();
-      setTimeout(() => {
-        removeTyping();
-        const aiText = withReminder
-          ? `Reminder set for ${rem}. All done!`
-          : 'No reminder — got it. Task is ready!';
-        addMsg({ type: 'ai', text: aiText });
-        setTimeout(() => setShowSave(true), 400);
-      }, 700);
-    }
-  }, [editMode, step, addMsg, showTyping, removeTyping]);
+    // ── Main flow — only "Looks good ✓" reaches here ──
+    addMsg({ type: 'user', text: chip });
+    showTyping();
+    setTimeout(() => {
+      removeTyping();
+      const aiText = pendingRef.current.hasReminder
+        ? `Reminder set for ${pendingRef.current.reminder}. All done!`
+        : 'No reminder — got it. Task is ready!';
+      addMsg({ type: 'ai', text: aiText });
+      setTimeout(() => setShowSave(true), 400);
+    }, 700);
+  }, [editMode, addMsg, showTyping, removeTyping]);
 
   const handleSave = async () => {
-    const task = {
-      id:        generateId(),
+    const base = {
+      id:           generateId(),
       ...pendingRef.current,
-      done:      false,
-      priority:  'Medium',
-      createdAt: new Date().toISOString(),
-      userId:    'user_001',
+      reminderDate: pendingRef.current.reminderISO,
+      done:         false,
+      priority:     'Medium',
+      createdAt:    new Date().toISOString(),
+      userId:       USER_ID,
     };
+    const notificationId = await scheduleTaskNotification(base);
+    const task = { ...base, notificationId };
     await addTask(task);
     navigation.reset({
       index: 1,
@@ -355,6 +358,16 @@ function SummaryCard({ pending, onEditCat, onEditDate }) {
               <Text style={styles.dateText}> {pending.dateLabel}</Text>
             </View>
           </View>
+          <View style={styles.reminderRow}>
+            <Ionicons
+              name={pending.hasReminder ? 'notifications' : 'notifications-off-outline'}
+              size={12}
+              color={pending.hasReminder ? colors.green : colors.textTertiary}
+            />
+            <Text style={[styles.reminderRowText, !pending.hasReminder && { color: colors.textTertiary }]}>
+              {' '}{pending.hasReminder ? pending.reminder : 'No reminder'}
+            </Text>
+          </View>
         </View>
         <View style={styles.cardBtns}>
           <TouchableOpacity style={styles.cardBtn} onPress={onEditCat} activeOpacity={0.7}>
@@ -454,6 +467,8 @@ const styles = StyleSheet.create({
   cardMeta:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
   datePill:  { flexDirection: 'row', alignItems: 'center' },
   dateText:  { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
+  reminderRow:     { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  reminderRowText: { fontSize: 11, color: colors.green, fontWeight: '500' },
   cardBtns: {
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,

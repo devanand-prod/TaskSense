@@ -12,6 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import CategoryChip from '../components/CategoryChip';
 import { colors, typography } from '../theme';
 import { updateTask, deleteTask } from '../api/sheets';
+import { formatReminderLabel } from '../utils/nlp';
+import { scheduleTaskNotification, cancelTaskNotification } from '../utils/notifications';
 
 export default function DetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
@@ -22,7 +24,10 @@ export default function DetailScreen({ route, navigation }) {
     await updateTask(updated);
   };
 
-  const handleToggle = () => save({ ...task, done: !task.done });
+  const handleToggle = () => {
+    if (!task.done) cancelTaskNotification(task);
+    save({ ...task, done: !task.done });
+  };
 
   const handleDelete = () => {
     Alert.alert('Delete task', 'Are you sure you want to delete this task?', [
@@ -31,6 +36,7 @@ export default function DetailScreen({ route, navigation }) {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
+          cancelTaskNotification(task);
           await deleteTask(task.id);
           navigation.goBack();
         },
@@ -38,7 +44,18 @@ export default function DetailScreen({ route, navigation }) {
     ]);
   };
 
-  const removeReminder = () => save({ ...task, reminder: null });
+  const removeReminder = () => {
+    cancelTaskNotification(task);
+    save({ ...task, reminder: null, reminderDate: null, notificationId: null });
+  };
+
+  const addReminder = async () => {
+    const reminderDate = task.dateISO || new Date().toISOString();
+    const label = formatReminderLabel(new Date(reminderDate));
+    const withDate = { ...task, reminderDate };
+    const notificationId = await scheduleTaskNotification(withDate);
+    save({ ...withDate, reminder: label, notificationId });
+  };
 
   const priorityColor =
     task.priority === 'High'
@@ -143,7 +160,7 @@ export default function DetailScreen({ route, navigation }) {
           </View>
         ) : (
           <View style={{ marginHorizontal: 18, marginVertical: 12 }}>
-            <TouchableOpacity style={styles.addReminderBtn} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.addReminderBtn} onPress={addReminder} activeOpacity={0.7}>
               <Ionicons name="notifications-outline" size={16} color={colors.primary} />
               <Text style={styles.addReminderText}>Add a reminder</Text>
             </TouchableOpacity>

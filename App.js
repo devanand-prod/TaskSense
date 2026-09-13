@@ -52,24 +52,6 @@ function MainTabs() {
           ),
         }}
       />
-      <Tab.Screen
-        name="Calendar"
-        component={HomeScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="calendar-outline" size={22} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={HomeScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="settings-outline" size={22} color={color} />
-          ),
-        }}
-      />
     </Tab.Navigator>
   );
 }
